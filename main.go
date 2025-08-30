@@ -2,8 +2,6 @@ package main
 
 import (
 	"log"
-  crand "crypto/rand"
-  "encoding/hex"
 	"os"
 	"strings"
 
@@ -97,7 +95,7 @@ func handlePrayer(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	// Send request to mod channel with buttons
   _, err := s.ChannelMessageSendComplex(modChannelID, &discordgo.MessageSend{
-    Content: "New prayer request from **" + userName + "**:",
+    Content: "<@&1359706201226739742> New prayer request from **" + userName + "**:",
     Embeds: []*discordgo.MessageEmbed{
         {
             Description: prayerText,
@@ -178,12 +176,4 @@ func handleButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			}
 		}
 	}
-}
-
-func newID() string {
-  b := make([]byte, 8)
-  if _, err := crand.Read(b); err != nil {
-    panic(err)
-  }
-  return hex.EncodeToString(b)
 }
