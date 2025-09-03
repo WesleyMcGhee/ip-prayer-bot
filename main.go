@@ -112,7 +112,7 @@ func handlePrayer(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
   _, err := s.ChannelMessageSendComplex(modChannelID, &discordgo.MessageSend{
-    Content: "New prayer request from **" + userName + "**:",
+    Content: "<@&1359706201226739742> New prayer request from **" + userName + "**:",
     Embeds: []*discordgo.MessageEmbed{
         {
             Description: prayerText,
