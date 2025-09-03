@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+  crand "crypto/rand"
+  "encoding/hex"
 	"os"
 	"strings"
 
@@ -17,6 +19,12 @@ var (
 	modChannelID    string
 	publicChannelID string
 )
+
+var prayerRequests = make(map[string]struct {
+  UserID   string
+  Username string
+  Text     string
+})
 
 func init() {
 	if err := godotenv.Load(); err != nil {
@@ -81,7 +89,17 @@ func handlePrayer(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	userID := i.Member.User.ID
   userName := i.Member.User.Username
 
-	// Acknowledge user (ephemeral)
+  id := newID()
+  prayerRequests[id] = struct {
+    UserID string
+    Username string
+    Text string
+  }{
+    UserID: userID,
+    Username: userName,
+    Text: prayerText,
+  }
+
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -93,9 +111,8 @@ func handlePrayer(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	// Send request to mod channel with buttons
   _, err := s.ChannelMessageSendComplex(modChannelID, &discordgo.MessageSend{
-    Content: "<@&1359706201226739742> New prayer request from **" + userName + "**:",
+    Content: "New prayer request from **" + userName + "**:",
     Embeds: []*discordgo.MessageEmbed{
         {
             Description: prayerText,
@@ -108,12 +125,12 @@ func handlePrayer(s *discordgo.Session, i *discordgo.InteractionCreate) {
                 discordgo.Button{
                     Label:    "Accept",
                     Style:    discordgo.SuccessButton,
-                    CustomID: "accept:" + userID + ":" + prayerText,
+                    CustomID: "accept:" + id,
                 },
                 discordgo.Button{
                     Label:    "Reject",
                     Style:    discordgo.DangerButton,
-                    CustomID: "reject:" + userID,
+                    CustomID: "reject:" + id,
                 },
             },
         },
@@ -126,15 +143,15 @@ if err != nil {
 }
 
 func handleButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	parts := strings.SplitN(i.MessageComponentData().CustomID, ":", 3)
-	if len(parts) < 2 {
+	parts := strings.SplitN(i.MessageComponentData().CustomID, ":", 2)
+	if len(parts) != 2 {
 		return
 	}
-	action, userID := parts[0], parts[1]
-	prayerText := ""
-	if action == "accept" && len(parts) == 3 {
-		prayerText = parts[2]
-	}
+	action, id := parts[0], parts[1]
+  req, ok := prayerRequests[id]
+  if !ok {
+    return
+  }
 
 	// Always ack quickly to avoid timeouts
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -147,7 +164,7 @@ func handleButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	switch action {
 	case "accept":
 		// Post anonymously to public channel
-		if _, err := s.ChannelMessageSend(publicChannelID, "🙏 **Prayer Request:**\n"+prayerText); err != nil {
+		if _, err := s.ChannelMessageSend(publicChannelID, "🙏 **Prayer Request:**\n"+req.Text); err != nil {
 			log.Println("failed to post public prayer:", err)
 		}
 		// Edit moderator message
@@ -170,10 +187,19 @@ func handleButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			log.Println("edit after reject failed:", err)
 		}
 		// Try to DM user privately
-		if userID != "" {
-			if ch, err := s.UserChannelCreate(userID); err == nil {
+		if req.UserID != "" {
+			if ch, err := s.UserChannelCreate(req.UserID); err == nil {
 				_, _ = s.ChannelMessageSend(ch.ID, "⚠️ Your prayer request was not approved by the moderators.")
 			}
 		}
 	}
+  delete(prayerRequests, id)
+}
+
+func newID() string {
+  b := make([]byte, 8)
+  if _, err := crand.Read(b); err != nil {
+    panic(err)
+  }
+  return hex.EncodeToString(b)
 }
